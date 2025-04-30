@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recurrence Relation Solver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.7/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const App = () => {
+            const [relationType, setRelationType] = useState("linear");
+            const [equation, setEquation] = useState("");
+            const [initialConditions, setInitialConditions] = useState("");
+            const [showDropdown, setShowDropdown] = useState(false);
+            const [result, setResult] = useState("");
+            const [finalEquation, setFinalEquation] = useState("");
+            const [chartData, setChartData] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState("");
+            const [showExamples, setShowExamples] = useState(false);
+            const [examples, setExamples] = useState([]);
+
+            const relationTypes = [
+                { id: "linear", name: "Linear" },
+                { id: "divide", name: "Divide and Conquer" },
+                { id: "substitution", name: "Substitution" },
+                { id: "homogeneous", name: "Homogeneous" },
+                { id: "non-homogeneous", name: "Non-Homogeneous" },
+            ];
+
+            useEffect(() => {
+                axios.get("http://localhost:8000/examples")
+                    .then(response => setExamples(response.data))
+                    .catch(err => console.error("Failed to fetch examples:", err));
+            }, []);
+
+            const handleSolve = async () => {
+                setIsLoading(true);
+                setError("");
+                setResult("");
+                setFinalEquation("");
+                setChartData([]);
+
+                if (!equation.trim()) {
+                    setError("Please enter a recurrence relation");
+                    setIsLoading(false);
+                    return;
+                }
+                if (!initialConditions.trim()) {
+                    setError("Please enter initial conditions");
+                    setIsLoading(false);
+                    return;
+                }
+
+                try {
+                    const response = await axios.post("http://localhost:8000/solve", {
+                        relationType,
+                        equation,
+                        initialConditions,
+                    });
+                    setResult(response.data.solution);
+                    setFinalEquation(response.data.final_equation);
+                    setChartData(response.data.chart_data || []);
+                    setIsLoading(false);
+                    window.MathJax.typesetPromise();
+                } catch (err) {
+                    setError(
+                        err.response?.data?.error ||
+                        "An error occurred while solving the recurrence relation"
+                    );
+                    setIsLoading(false);
+                }
+            };
+
+            const handleExampleSelect = (example) => {
+                setRelationType(example.type);
+                setEquation(example.equation);
+                setInitialConditions(example.initial_conditions);
+                setShowExamples(false);
+            };
+
+            useEffect(() => {
+                if (result && !isLoading && chartData.length) {
+                    const chartDom = document.getElementById("solution-chart");
+                    if (chartDom) {
+                        const myChart = echarts.init(chartDom);
+                        const option = {
+                            animation: false,
+                            title: { text: "Sequence Visualization", left: "center", textStyle: { color: '#e0e0e0' } },
+                            tooltip: { trigger: "axis" },
+                            xAxis: { type: "category", data: Array.from({ length: chartData.length }, (_, i) => i), axisLabel: { color: '#e0e0e0' } },
+                            yAxis: { type: "value", name: "a(n)", axisLabel: { color: '#e0e0e0' } },
+                            series: [{
+                                name: "Sequence",
+                                type: "line",
+                                data: chartData,
+                                smooth: true,
+                                lineStyle: { width: 3, color: "#00bcd4" },
+                                symbol: "circle",
+                                symbolSize: 8,
+                            }],
+                        };
+                        myChart.setOption(option);
+                        return () => myChart.dispose();
+                    }
+                }
+            }, [result, isLoading, chartData]);
+
+            useEffect(() => {
+                if (result || finalEquation) {
+                    window.MathJax.typesetPromise();
+                }
+            }, [result, finalEquation]);
+
+            return (
+                <div className="min-h-screen bg-gray-900 text-gray-100">
+                    <header className="bg-gray-800 shadow-md sticky top-0 z-10">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+                            <h1 className="text-2xl font-bold text-teal-400">Recurrence Relation Solver</h1>
+                            <nav className="hidden sm:flex space-x-4">
+                                <a href="#solver" className="text-gray-300 hover:text-teal-400">Solver</a>
+                                <a href="#about" className="text-gray-300 hover:text-teal-400">About</a>
+                            </nav>
+                            <button className="sm:hidden text-gray-300" onClick={() => setShowExamples(!showExamples)}>
+                                <i className="fas fa-bars"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    <section className="bg-gray-800 py-12">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col lg:flex-row items-center">
+                            <div className="lg:w-1/2 text-center lg:text-left">
+                                <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-100">
+                                    Solve <span className="text-teal-400">Recurrence Relations</span> Easily
+                                </h1>
+                                <p className="mt-4 text-lg text-gray-400">
+                                    Input your recurrence relation, get step-by-step solutions, and visualize growth patterns.
+                                </p>
+                                <div className="mt-6 flex justify-center lg:justify-start space-x-4">
+                                    <a href="#solver" className="bg-teal-500 text-white px-6 py-3 rounded-md hover:bg-teal-600">
+                                        Start Solving
+                                    </a>
+                                    <button onClick={() => setShowExamples(true)} className="bg-gray-700 text-gray-100 px-6 py-3 rounded-md hover:bg-gray-600">
+                                        View Examples
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="lg:w-1/2 mt-8 lg:mt-0">
+                                <img
+                                    className="w-full rounded-lg shadow-lg"
+                                    src="https://readdy.ai/api/search-image?query=Mathematical%20equations%20and%20recurrence%20relations%20visualization%20with%20elegant%20blue%20and%20purple%20gradient%20background%2C%20abstract%20mathematical%20patterns%20and%20formulas%20floating%20in%203D%20space%2C%20modern%20digital%20art%20style%2C%20clean%20and%20minimalist&width=700&height=500&seq=1&orientation=landscape"
+                                    alt="Mathematical visualization"
+                                />
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="solver" className="py-12 bg-gray-900">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="text-center">
+                                <h2 className="text-base text-teal-400 font-semibold uppercase">Solver Tool</h2>
+                                <h3 className="mt-2 text-3xl font-extrabold text-gray-100">Solve Any Recurrence Relation</h3>
+                                <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+                                    Enter your recurrence relation and initial conditions to get detailed solutions.
+                                </p>
+                            </div>
+                            <div className="mt-10 bg-gray-800 rounded-lg shadow-lg p-6 sm:p-8">
+                                <div className="space-y-6">
+                                    <div>
+                                        <label htmlFor="relation-type" className="block text-sm font-medium text-gray-300">
+                                            Relation Type
+                                        </label>
+                                        <div className="mt-1 relative">
+                                            <button
+                                                type="button"
+                                                className="bg-gray-700 w-full border border-gray-600 rounded-md shadow-sm pl-3 pr-10 py-2 text-left text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                onClick={() => setShowDropdown(!showDropdown)}
+                                            >
+                                                <span className="block truncate">
+                                                    {relationTypes.find(type => type.id === relationType)?.name}
+                                                </span>
+                                                <span className="absolute inset-y-0 right-0 flex items-center pr-2">
+                                                    <i className="fas fa-chevron-down text-gray-400"></i>
+                                                </span>
+                                            </button>
+                                            {showDropdown && (
+                                                <div className="absolute z-10 mt-1 w-full bg-gray-700 rounded-md shadow-lg text-gray-100">
+                                                    {relationTypes.map(type => (
+                                                        <div
+                                                            key={type.id}
+                                                            className={`cursor-pointer py-2 px-3 hover:bg-gray-600 ${relationType === type.id ? 'bg-gray-600 text-teal-400' : ''}`}
+                                                            onClick={() => {
+                                                                setRelationType(type.id);
+                                                                setShowDropdown(false);
+                                                            }}
+                                                        >
+                                                            {type.name}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="equation" className="block text-sm font-medium text-gray-300">
+                                            Recurrence Relation
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="equation"
+                                            className="mt-1 bg-gray-700 border border-gray-600 rounded-md w-full p-2 text-gray-100 focus:ring-teal-500 focus:border-teal-500"
+                                            placeholder="e.g., a(n)=2*a(n-1)+3"
+                                            value={equation}
+                                            onChange={e => setEquation(e.target.value)}
+                                        />
+                                        <p className="mt-2 text-sm text-gray-500">Enter in the form a(n)=...</p>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="initial-conditions" className="block text-sm font-medium text-gray-300">
+                                            Initial Conditions
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="initial-conditions"
+                                            className="mt-1 bg-gray-700 border border-gray-600 rounded-md w-full p-2 text-gray-100 focus:ring-teal-500 focus:border-teal-500"
+                                            placeholder="e.g., a(0)=1, a(1)=2"
+                                            value={initialConditions}
+                                            onChange={e => setInitialConditions(e.target.value)}
+                                        />
+                                        <p className="mt-2 text-sm text-gray-500">Specify as a(0)=1, a(1)=2, etc.</p>
+                                    </div>
+                                    {error && (
+                                        <div className="bg-red-900 text-red-200 p-4 rounded-md flex">
+                                            <i className="fas fa-exclamation-circle mr-2"></i>
+                                            <span>{error}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex space-x-4">
+                                        <button
+                                            onClick={handleSolve}
+                                            className="flex-1 bg-teal-500 text-white py-3 rounded-md hover:bg-teal-600 disabled:bg-teal-700"
+                                            disabled={isLoading}
+                                        >
+                                            {isLoading ? (
+                                                <>
+                                                    <i className="fas fa-circle-notch fa-spin mr-2"></i>
+                                                    Solving...
+                                                </>
+                                            ) : (
+                                                "Solve"
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={() => setShowExamples(true)}
+                                            className="flex-1 bg-gray-700 text-gray-100 py-3 rounded-md hover:bg-gray-600"
+                                        >
+                                            Examples
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {result && !isLoading && (
+                                <div className="mt-10 bg-gray-800 rounded-lg shadow-lg p-6 sm:p-8">
+                                    <h3 className="text-lg font-medium text-gray-100 mb-4">Solution Steps</h3>
+                                    <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: result }} />
+                                    <div className="mt-6 bg-gray-700 p-6 rounded-lg">
+                                        <h4 className="text-lg font-medium text-gray-100 mb-4">Final Equation</h4>
+                                        <div className="bg-gray-800 p-4 rounded-lg text-center">
+                                            <span className="text-xl text-gray-100">{finalEquation}</span>
+                                        </div>
+                                    </div>
+                                    <div className="mt-8">
+                                        <h4 className="text-lg font-medium text-gray-100 mb-4">Sequence Visualization</h4>
+                                        <div id="solution-chart" className="h-80 w-full"></div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    {showExamples && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
+                            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-medium text-gray-100">Example Recurrence Relations</h3>
+                                    <button onClick={() => setShowExamples(false)} className="text-gray-400 hover:text-gray-100">
+                                        <i className="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div className="space-y-4">
+                                    {examples.map((example, index) => (
+                                        <div key={index} className="bg-gray-700 p-4 rounded-md cursor-pointer hover:bg-gray-600" onClick={() => handleExampleSelect(example)}>
+                                            <p className="text-gray-100"><strong>Type:</strong> {relationTypes.find(t => t.id === example.type)?.name}</p>
+                                            <p className="text-gray-300"><strong>Equation:</strong> {example.equation}</p>
+                                            <p className="text-gray-300"><strong>Initial Conditions:</strong> {example.initial_conditions}</p>
+                                            <p className="text-gray-400"><strong>Solution:</strong> {example.solution}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <section id="about" className="py-12 bg-gray-800">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <h2 className="text-base text-teal-400 font-semibold uppercase">About</h2>
+                            <h3 className="mt-2 text-3xl font-extrabold text-gray-100">What are Recurrence Relations?</h3>
+                            <p className="mt-4 text-lg text-gray-400">
+                                Recurrence relations define sequences where each term is a function of previous terms. They are crucial in algorithm analysis and discrete mathematics.
+                            </p>
+                            <div className="mt-6 grid md:grid-cols-2 gap-4">
+                                {relationTypes.map(type => (
+                                    <div key={type.id} className="bg-gray-700 p-4 rounded-md">
+                                        <h4 className="text-lg font-medium text-gray-100">{type.name}</h4>
+                                        <p className="text-gray-400">
+                                            {type.id === 'linear' && 'Linear combinations of previous terms with constant coefficients.'}
+                                            {type.id === 'divide' && 'Used in divide-and-conquer algorithms like merge sort.'}
+                                            {type.id === 'substitution' && 'Solved by guessing a solution and verifying via substitution.'}
+                                            {type.id === 'homogeneous' && 'No non-recursive terms, solved via characteristic equations.'}
+                                            {type.id === 'non-homogeneous' && 'Includes non-recursive terms, combining homogeneous and particular solutions.'}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    <footer className="bg-gray-800 py-8">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                            <p className="text-gray-400">© 2025 Recurrence Relation Solver. Powered by Readdy.ai.</p>
+                            <div className="mt-4 flex justify-center space-x-4">
+                                <a href="#" className="text-gray-400 hover:text-teal-400"><i className="fab fa-github"></i></a>
+                                <a href="#" className="text-gray-400 hover:text-teal-400"><i className="fab fa-twitter"></i></a>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+</body>
+
+</html>
